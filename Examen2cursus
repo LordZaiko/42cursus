@@ -1,1 +1,246 @@
+import customtkinter as ctk
+from tkinter import filedialog
+from PIL import Image
+import os
+# Importamos todo de database
+from database import *
 
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+class AppRecetario(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("ChefPro v1.2.1 - Estabilidad Total")
+        self.geometry("1100x700")
+        
+        self.id_receta_actual = None
+        self.ruta_imagen_seleccionada = ""
+        self.foto_actual = None # Para que Python no borre la foto de la memoria
+
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # --- PANEL IZQUIERDO ---
+        self.sidebar = ctk.CTkFrame(self, width=250)
+        self.sidebar.grid(row=0, column=0, sticky="nsew")
+        ctk.CTkLabel(self.sidebar, text="MI COCINA", font=("Roboto", 24, "bold")).pack(pady=20)
+        
+        ctk.CTkButton(self.sidebar, text="+ NUEVA RECETA", command=self.limpiar_campos, fg_color="#e67e22").pack(pady=10, padx=20, fill="x")
+        
+        self.lista_recetas_frame = ctk.CTkScrollableFrame(self.sidebar, label_text="Tus Platillos")
+        self.lista_recetas_frame.pack(padx=10, pady=20, fill="both", expand=True)
+
+        # --- PANEL DERECHO ---
+        self.main_frame = ctk.CTkScrollableFrame(self, corner_radius=15)
+        self.main_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
+
+        # Visualizador de IMAGEN mejorado
+        self.lbl_foto = ctk.CTkLabel(self.main_frame, text="Sin Imagen", width=300, height=200, fg_color="gray20", corner_radius=10)
+        self.lbl_foto.pack(pady=10)
+        
+        ctk.CTkButton(self.main_frame, text="Seleccionar Foto", command=self.seleccionar_foto, fg_color="#9b59b6").pack(pady=5)
+
+        self.entry_nombre = ctk.CTkEntry(self.main_frame, placeholder_text="Nombre de la receta...", width=500)
+        self.entry_nombre.pack(pady=5)
+
+        self.entry_tiempo = ctk.CTkEntry(self.main_frame, placeholder_text="Tiempo de preparación...", width=500)
+        self.entry_tiempo.pack(pady=5)
+
+        self.txt_ingredientes = ctk.CTkTextbox(self.main_frame, width=500, height=250)
+        self.txt_ingredientes.pack(pady=10)
+        
+        self.btn_guardar = ctk.CTkButton(self.main_frame, text="GUARDAR RECETA", command=self.click_guardar, fg_color="#2ecc71", width=240, height=40)
+        self.btn_guardar.pack(pady=10)
+
+        self.btn_eliminar = ctk.CTkButton(self.main_frame, text="ELIMINAR RECETA", command=self.click_eliminar, fg_color="#e74c3c")
+        
+        self.actualizar_lista_visual()
+
+    def seleccionar_foto(self):
+        ruta = filedialog.askopenfilename(filetypes=[("Imágenes", "*.jpg *.png *.jpeg *.bmp")])
+        if ruta:
+            self.ruta_imagen_seleccionada = ruta
+            self.mostrar_imagen(ruta)
+
+    def mostrar_imagen(self, ruta):
+        # 1. Intentamos cargar la imagen real
+        if ruta and os.path.exists(ruta):
+            try:
+                img_raw = Image.open(ruta)
+                # La guardamos en self.foto_actual para que Python no la olvide
+                self.foto_actual = ctk.CTkImage(light_image=img_raw, dark_image=img_raw, size=(300, 200))
+                self.lbl_foto.configure(image=self.foto_actual, text="")
+                return # Salimos de la función si todo fue bien
+            except Exception as e:
+                print(f"Error cargando imagen: {e}")
+
+        # 2. Si NO hay ruta o hubo error, ponemos una imagen "vacía" Pro
+        # Esto evita el error de pyimage1 porque SIEMPRE hay un objeto imagen
+        img_vacia = Image.new('RGBA', (300, 200), (0, 0, 0, 0)) # Imagen transparente
+        self.foto_actual = ctk.CTkImage(light_image=img_vacia, dark_image=img_vacia, size=(300, 200))
+        self.lbl_foto.configure(image=self.foto_actual, text="Sin Imagen")
+
+    def actualizar_lista_visual(self):
+        for widget in self.lista_recetas_frame.winfo_children():
+            widget.destroy()
+        
+        recetas = obtener_todas_las_recetas()
+        for r in recetas:
+            # Usamos una función separada para evitar errores de lambda
+            btn = ctk.CTkButton(self.lista_recetas_frame, text=f"🍴 {r[1]}", 
+                                fg_color="transparent", anchor="w",
+                                command=lambda info=r: self.cargar_detalle_receta(info))
+            btn.pack(fill="x", pady=2)
+
+    def cargar_detalle_receta(self, receta):
+        # Extraemos los datos de la receta (ahora con 6 columnas)
+        id_r, nombre, ing, pasos, tiempo, imagen = receta
+        
+        self.limpiar_campos()
+        self.id_receta_actual = id_r
+        self.entry_nombre.insert(0, nombre)
+        self.entry_tiempo.insert(0, tiempo)
+        self.txt_ingredientes.insert("1.0", ing)
+        
+        self.ruta_imagen_seleccionada = imagen if imagen else ""
+        self.mostrar_imagen(self.ruta_imagen_seleccionada)
+        
+        self.btn_guardar.configure(text="GUARDAR CAMBIOS", fg_color="#3498db")
+        self.btn_eliminar.pack(pady=5)
+
+    def limpiar_campos(self):
+        self.id_receta_actual = None
+        self.ruta_imagen_seleccionada = ""
+        self.entry_nombre.delete(0, 'end')
+        self.entry_tiempo.delete(0, 'end')
+        self.txt_ingredientes.delete("1.0", "end")
+        self.mostrar_imagen("") # Limpia la foto visualmente
+        self.btn_guardar.configure(text="GUARDAR RECETA", fg_color="#2ecc71")
+        self.btn_eliminar.pack_forget()
+
+    def click_guardar(self):
+        nombre = self.entry_nombre.get()
+        ing = self.txt_ingredientes.get("1.0", "end-1c")
+        tiempo = self.entry_tiempo.get()
+        img = self.ruta_imagen_seleccionada
+
+        if nombre.strip():
+            if self.id_receta_actual:
+                actualizar_receta_db(self.id_receta_actual, nombre, ing, tiempo, img)
+            else:
+                guardar_receta(nombre, ing, tiempo, img)
+            
+            self.actualizar_lista_visual()
+            self.limpiar_campos()
+
+    def click_eliminar(self):
+        if self.id_receta_actual:
+            eliminar_receta_db(self.id_receta_actual)
+            self.actualizar_lista_visual()
+            self.limpiar_campos()
+
+if __name__ == "__main__":
+    app = AppRecetario()
+    app.mainloop()
+import sqlite3
+
+def crear_base_de_datos():
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS recetas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            ingredientes TEXT NOT NULL,
+            pasos TEXT NOT NULL,
+            tiempo_coccion TEXT,
+            imagen TEXT  -- Aquí guardaremos la ruta de la foto
+        )
+    ''')
+    conexion.commit()
+    conexion.close()
+
+def guardar_receta(nombre, ingredientes, tiempo, imagen):
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute("INSERT INTO recetas (nombre, ingredientes, pasos, tiempo_coccion, imagen) VALUES (?, ?, ?, ?, ?)",
+                   (nombre, ingredientes, "Pasos...", tiempo, imagen))
+    conexion.commit()
+    conexion.close()
+
+def actualizar_receta_db(id_receta, nombre, ingredientes, tiempo, imagen):
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute("UPDATE recetas SET nombre=?, ingredientes=?, tiempo_coccion=?, imagen=? WHERE id=?",
+                   (nombre, ingredientes, tiempo, imagen, id_receta))
+    conexion.commit()
+    conexion.close()
+
+def obtener_todas_las_recetas():
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute("SELECT * FROM recetas")
+    datos = cursor.fetchall()
+    conexion.close()
+    return datos
+
+def eliminar_receta_db(id_receta):
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute("DELETE FROM recetas WHERE id = ?", (id_receta,))
+    conexion.commit()
+    conexion.close()
+
+crear_base_de_datos()
+
+import sqlite3
+
+def crear_base_de_datos():
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS recetas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            ingredientes TEXT NOT NULL,
+            pasos TEXT NOT NULL,
+            tiempo_coccion TEXT,
+            imagen TEXT  -- Aquí guardaremos la ruta de la foto
+        )
+    ''')
+    conexion.commit()
+    conexion.close()
+
+def guardar_receta(nombre, ingredientes, tiempo, imagen):
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute("INSERT INTO recetas (nombre, ingredientes, pasos, tiempo_coccion, imagen) VALUES (?, ?, ?, ?, ?)",
+                   (nombre, ingredientes, "Pasos...", tiempo, imagen))
+    conexion.commit()
+    conexion.close()
+
+def actualizar_receta_db(id_receta, nombre, ingredientes, tiempo, imagen):
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute("UPDATE recetas SET nombre=?, ingredientes=?, tiempo_coccion=?, imagen=? WHERE id=?",
+                   (nombre, ingredientes, tiempo, imagen, id_receta))
+    conexion.commit()
+    conexion.close()
+
+def obtener_todas_las_recetas():
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute("SELECT * FROM recetas")
+    datos = cursor.fetchall()
+    conexion.close()
+    return datos
+
+def eliminar_receta_db(id_receta):
+    conexion = sqlite3.connect("recetas.db")
+    cursor = conexion.cursor()
+    cursor.execute("DELETE FROM recetas WHERE id = ?", (id_receta,))
+    conexion.commit()
+    conexion.close()
+
+crear_base_de_datos()
