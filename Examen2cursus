@@ -244,3 +244,15 @@ def eliminar_receta_db(id_receta):
     conexion.close()
 
 crear_base_de_datos()
+
+El código es excepcionalmente limpio y la implementación 
+de customtkinter para la interfaz del recetario es 
+impecable; la estructura de clases demuestra una base 
+sólida de POO. Sin embargo, para alcanzar el 100/100, se 
+requiere la implementación de una base de datos 
+persistente mediante SQLite o PostgreSQL en lugar de 
+diccionarios locales, y la gestión de excepciones en la carga 
+de imágenes (try-except) es mejorable. El programa es 
+perfecto en ejecución, pero le falta escalabilidad.
+
+
